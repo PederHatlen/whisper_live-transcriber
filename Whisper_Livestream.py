@@ -1,10 +1,9 @@
-import whisper, os, argparse
+import whisper, os, time, argparse
 from threading import Thread
-
 
 def audioSplitterFunc(ffmpeg_livestream_url, ffmpeg_segment_length):
     # Start a process with ffmpeg to save temporary segments from livestream (Not great, but io functionality with segments are non existent)
-    os.system(f'ffmpeg -i "{ffmpeg_livestream_url}" -map a -hide_banner -loglevel error -f segment -segment_time {ffmpeg_segment_length} -strftime 1 ./audio/%Y-%m-%d_%H-%M-%S.mp3')
+    os.system(f'ffmpeg -i "{ffmpeg_livestream_url}" -map 0:a -hide_banner -loglevel error -f segment -segment_time {ffmpeg_segment_length} -strftime 1 ./audio/%Y-%m-%d_%H-%M-%S.mp3')
 
 def liveTranscription(ffmpeg_livestream_url, ffmpeg_segment_length, whisper_model, queue = False):
     # load the whisper module
@@ -19,7 +18,8 @@ def liveTranscription(ffmpeg_livestream_url, ffmpeg_segment_length, whisper_mode
     # Start a new thread with the audio splitter instance
     # Multiprocessing, becouse closes with main aplication
     Thread(target=audioSplitterFunc, args=(ffmpeg_livestream_url, ffmpeg_segment_length)).start()
-
+    
+    lastOut = ""
     while True:
         # Gather all clips, and sort (since name = datetime)
         clips = os.listdir('./audio/')
@@ -27,9 +27,23 @@ def liveTranscription(ffmpeg_livestream_url, ffmpeg_segment_length, whisper_mode
         # If excists more or exactly 2 clips in audio folder, ffmpeg has started on a new file, and the old one is ready
         # ffmpeg continually writes to file untill the desired length is reached, then it starts on a new, the delay is therefore minimal.
         if len(clips) >= 2:
-            transcription = model.transcribe(f'./audio/{clips[0]}', fp16=False)
-            print(f"[queue: {len(clips)-2}] " if queue else "" + transcription["text"])
+            # load audio and pad/trim it to fit 30 seconds
+            audio = whisper.load_audio(f'./audio/{clips[0]}')
+            audio = whisper.pad_or_trim(audio)
+
+            # make log-Mel spectrogram and move to the same device as the model
+            mel = whisper.log_mel_spectrogram(audio).to(model.device)
+        
+            # decode the audio
+            options = whisper.DecodingOptions(prompt=lastOut, language="no", fp16=True, )
+            result = whisper.decode(model, mel, options)
+            
+            # transcription = model.transcribe(f'./audio/{clips[0]}', fp16=False, temperature=0.25, condition_on_previous_text=True)
+            print((f"[queue: {len(clips)-2}] " if queue else "") + result["text"])
             os.remove(f"./audio/{clips[0]}")
+            
+            lastOut = result['text']
+        time.sleep(0.5)
 
 if __name__ == "__main__":
     ffmpeg_segment_length = 5

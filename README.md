@@ -10,7 +10,7 @@ Performance of this programm is as fast as the system can handle whisper.
 
 `FFmpeg`,  
 `Python3.10` (whisper only supports 3.10 for now),  
-`whisper` installation instructions can be found here: [https://github.com/openai/whisper]
+`whisper` installation instructions can be found here: https://github.com/openai/whisper
 
 ## Note
 
