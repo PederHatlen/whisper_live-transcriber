@@ -5,27 +5,31 @@ whisper_model = "large-v2"
 whisper_urls = ["http://lyd.nrk.no/nrk_radio_alltid_nyheter_aac_h", "http://lyd.nrk.no/nrk_radio_p1_stor-oslo_aac_h", "http://lyd.nrk.no/nrk_radio_p3_aac_h"]
 whisper_names = ["AN", "P1", "P3"]
 whisper_previous = ["", "", ""]
+whisper_lang = "no"
+folder_location = "./audio_local/"
 
-model = whisper_live.setup(whisper_model)
+model = whisper_live.setup(whisper_model, folder_location)
 
-for url in whisper_urls:
-    file_location = f'./audio/{url}/'
+for i, url in enumerate(whisper_urls):
+    folder_location_spesific = folder_location+whisper_names[i]+"/"
     
     # Make audio folder if not exists, clear all files in it if anny
-    os.makedirs(file_location, exist_ok=True)
-    for fi in os.listdir(file_location): os.remove(file_location+fi)
+    os.makedirs(folder_location_spesific, exist_ok=True)
     
-    Thread(target=whisper_live.audioSplitterFunc, args=(url, 5)).start()
+    Thread(target=whisper_live.audioSplitterFunc, args=(url, 5, folder_location_spesific)).start()
 
 while True:
     time_total = time.time()
-    runs = 0
+    success = 0
     for i in range(len(whisper_urls)):
         time_start = time.time()
-        res = whisper_live.transcribe(f'./audio/{whisper_urls[i]}/', model, last_out=whisper_previous[i])
+        try:
+            res = whisper_live.transcribe(f'{folder_location}{whisper_names[i]}/', model, whisper_lang, whisper_previous[i])
+        except Exception as e:
+            print("Transcription failed:", e)
         if res['run']:
             print(f"[name: {whisper_names[i]}, Queue: {res['queue']}, Time: {round((time.time() - time_start)*1000)}ms]", res['res'].text)
             whisper_previous[i] = res['res'].text
-            runs+=1
-    if runs > 0: print(f"Total looptime was {round((time.time()-time_total), 2)}s")
+            success+=1
+    if success > 0: print(f"Total looptime was {round((time.time()-time_total), 2)}s")
     time.sleep(0.5)
